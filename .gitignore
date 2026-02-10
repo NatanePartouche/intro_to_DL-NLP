@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# PyTorch / checkpoints
+*.pth
+*.pt
+checkpoints/
+**/checkpoints/
