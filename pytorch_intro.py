@@ -208,28 +208,41 @@ def demo_devices() -> torch.device:
 
 
 # =========================================================
-# 5) AUTOGRAD
+# 5) AUTOGRAD + GRADIENT DESCENT (Concept central)
 # =========================================================
-def demo_autograd() -> None:
+def demo_autograd_and_training_link() -> None:
     """
-    Autograd: automatic gradient computation.
+    AUTOGRAD + GRADIENT DESCENT — The Core Idea of Deep Learning
 
-    What is a gradient?
-    - A gradient tells you how a value changes when you change an input.
-    - In ML, gradients tell us how to change weights to reduce the loss.
+    This section connects TWO fundamental ideas:
 
-    How Autograd works:
-    - requires_grad=True means: “track operations for differentiation”
-    - PyTorch builds a computation graph as you do operations.
-    - backward() computes gradients using the chain rule.
-    - After backward(), gradients are stored in .grad
+    1) Autograd (automatic differentiation)
+       - Computes derivatives automatically.
+       - Stores gradients in tensor.grad after backward().
 
-    This demo reproduces your example:
+    2) Gradient Descent (learning rule)
+       - Uses those gradients to update model parameters.
+       - Parameters are moved in the direction that reduces the loss.
+
+    KEY CONCEPT:
+        Gradient = slope
+        Learning = moving opposite to the slope
+
+    ---------------------------------------------------------
+    PART A — Pure Autograd (mathematical example)
+    ---------------------------------------------------------
+    We compute:
         e = (a*b - 5)^2
-    Then computes:
-        de/da and de/db
+
+    Then:
+        de/da
+        de/db
+
+    This shows how PyTorch applies the chain rule automatically.
+    ---------------------------------------------------------
     """
-    title("5) AUTOGRAD: requires_grad and backward()")
+
+    title("5A) AUTOGRAD: automatic gradient computation")
 
     a = torch.tensor(3.0, requires_grad=True)
     b = torch.tensor(4.0, requires_grad=True)
@@ -238,101 +251,313 @@ def demo_autograd() -> None:
     d = c - 5
     e = d ** 2
 
-    show_io("Inputs (a, b)", (a.item(), b.item()), "Output e", e.item())
+    print(f"a = {a.item()}, b = {b.item()}")
+    print(f"e = (a*b - 5)^2 = {e.item()}")
 
     e.backward()
-    show_io("Gradient de/da", a.grad.item(), "Gradient de/db", b.grad.item())
+
+    print("\nComputed gradients:")
+    print(f"de/da = {a.grad.item()}")
+    print(f"de/db = {b.grad.item()}")
 
     print("\nInterpretation:")
-    print("- de/da = 56 means: if a increases slightly, e increases ~56×that amount (locally).")
-    print("- de/db = 42 means: if b increases slightly, e increases ~42×that amount (locally).")
+    print("- Gradient tells how much e changes if we change a or b slightly.")
+    print("- PyTorch used the chain rule automatically.")
 
+
+    """
+    ---------------------------------------------------------
+    PART B — Using gradients to learn (training example)
+    ---------------------------------------------------------
+    Definitions (before training example)
+    
+    y_pred :
+        The predicted value produced by the model.
+        Here: y_pred = w * x
+        It is what the model THINKS the output should be.
+    
+    MSE (Mean Squared Error) :
+        The loss function measuring the difference between
+        prediction and true value.
+        MSE = mean((y_pred - y)^2)
+        It tells us how wrong the model is.
+    
+    w :
+        The model parameter (weight).
+        This is what we are trying to learn.
+    
+    Gradient :
+        The derivative of the loss with respect to a parameter.
+        It tells us:
+            - In which direction to change the parameter
+            - How strongly to change it
+    
+    dLoss :
+        The loss value (scalar).
+        Represents total error.
+    
+    dL/dw (dw) :
+        The derivative of the loss with respect to w.
+        Also written as:
+            gradient = dLoss/dw
+        It tells us how sensitive the loss is to changes in w.
+    
+    learning_rate :
+        A small positive number controlling how big each update step is.
+        Too big  -> unstable training
+        Too small -> very slow learning
+    
+    w.grad :
+        In PyTorch, this stores dLoss/dw automatically
+        after calling loss.backward().
+        It contains the computed gradient.
+    ---------------------------------------------------------
+    
+    Now we connect gradients to learning.
+
+    Model:
+        y_pred = w * x
+
+    Loss:
+        MSE = mean((y_pred - y)^2)
+
+    Gradient:
+        dLoss/dw
+
+    Update rule:
+        w = w - learning_rate * gradient
+
+    This is Gradient Descent.
+    ---------------------------------------------------------
+    """
+
+    title("5B) GRADIENT DESCENT: using gradients to learn")
+
+    # Simple dataset: approximately y = 2x
+    x = torch.tensor([[1.0], [2.0], [3.0], [4.0]])
+    y = torch.tensor([[2.0], [4.0], [6.0], [8.0]])
+
+    w = torch.tensor([1.0], requires_grad=True)
+    lr = 0.1
+
+    for epoch in range(5):
+        # Forward pass
+        y_pred = w * x
+
+        # Loss
+        loss = ((y_pred - y) ** 2).mean()
+
+        # Backward pass
+        loss.backward()
+
+        print(f"\nEpoch {epoch}")
+        print(f"  w       = {w.item():.4f}")
+        print(f"  loss    = {loss.item():.4f}")
+        print(f"  w.grad  = {w.grad.item():.4f}")
+
+        # Update (VERY IMPORTANT: disable gradient tracking)
+        with torch.no_grad():
+            w -= lr * w.grad
+
+        # Clear gradient (VERY IMPORTANT)
+        w.grad.zero_()
+
+    print("\nFinal understanding:")
+    print("- Autograd computes the slope.")
+    print("- Gradient descent uses that slope to improve parameters.")
+    print("- This loop is the foundation of ALL deep learning models.")
 
 # =========================================================
 # 6) TRAINING (mini loop)
 # =========================================================
 def demo_training(device: torch.device) -> Tuple[nn.Module, optim.Optimizer, List[float], List[float]]:
     """
-    Training: learning parameters (weights) that reduce the loss.
+    GOAL OF THIS SECTION
+    --------------------
+    Teach the core training logic used in *all* deep learning:
 
-    The training loop always follows the same pattern:
-        1) Forward pass   -> compute predictions
-        2) Loss           -> measure how wrong we are
-        3) Backward pass  -> compute gradients of loss wrt weights
-        4) Update step    -> adjust weights to reduce loss
+        Forward  -> compute predictions
+        Loss     -> measure error
+        Backward -> compute gradients (slopes)
+        Update   -> change parameters to reduce the loss
 
     We train a tiny model:
         y_pred = w * x
+    on a small dataset where y is approximately 2*x.
 
-    Two versions:
-    A) Manual gradient descent:
-       - You update w yourself: w = w - lr * grad
-    B) nn.Module + optimizer:
-       - Standard PyTorch way (scales to big networks)
-       - optimizer.step() updates parameters automatically
+    We show TWO versions:
+    A) Manual gradient descent (you update w yourself)
+    B) PyTorch style: nn.Module + optimizer (standard professional workflow)
 
-    Output:
-    - model, optimizer, and lists (losses, weights) for tracking
+    Returns:
+        model, optimizer, losses, weights (useful for plotting and checkpointing)
     """
     title("6) TRAINING: manual loop and nn.Module + optimizer")
 
-    X = torch.tensor([[7.01], [3.02], [4.99], [8.00]], dtype=torch.float32, device=device)
-    Y = torch.tensor([[14.01], [6.01], [10.00], [16.04]], dtype=torch.float32, device=device)
+    # ---------------------------------------------------------
+    # Dataset (x -> y)
+    # ---------------------------------------------------------
+    # EXPECTED: x and y are float tensors (float32) so gradients can be computed.
+    # They are moved to the chosen device (CPU/GPU).
+    x = torch.tensor([[7.01], [3.02], [4.99], [8.00]], dtype=torch.float32, device=device)
+    y = torch.tensor([[14.01], [6.01], [10.00], [16.04]], dtype=torch.float32, device=device)
 
-    # -------------------------
+    # =========================================================
     # A) Manual gradient descent
-    # -------------------------
+    # =========================================================
     title("6A) TRAINING (manual): y_pred = w*x")
 
+    # w is the ONLY learnable parameter here.
+    # requires_grad=True means: PyTorch will compute d(loss)/d(w) after backward().
     w = torch.tensor([1.0], dtype=torch.float32, requires_grad=True, device=device)
-    lr = 0.001
+
+    lr = 0.001  # learning rate: step size for parameter updates
 
     for epoch in range(10):
-        y_pred = w * X
-        loss = ((y_pred - Y) ** 2).mean()
+        # 1) FORWARD PASS
+        # ----------------
+        # Compute model predictions using the current parameter w.
+        # Here the model is: y_pred = w*x
+        y_pred = w * x
+
+        # 2) LOSS (error measure)
+        # -----------------------
+        # Mean Squared Error:
+        #   loss = mean((y_pred - y)^2)
+        # This is a single scalar number.
+        loss = ((y_pred - y) ** 2).mean()
+
+        # 3) BACKWARD PASS (gradients)
+        # ----------------------------
+        # Compute gradient of loss w.r.t. w:
+        #   w.grad = d(loss)/d(w)
+        # This uses automatic differentiation (chain rule).
         loss.backward()
 
+        # (Optional but very educational) See the gradient value:
+        grad_w = w.grad.item()
+
+        # 4) UPDATE STEP (gradient descent)
+        # --------------------------------
+        # We want to REDUCE the loss, so we move w opposite to the gradient:
+        #   w = w - lr * w.grad
+        #
+        # Important: we must NOT track this update in Autograd.
+        # That's why we use torch.no_grad().
         with torch.no_grad():
             w -= lr * w.grad
+
+            # IMPORTANT: gradients accumulate by default in PyTorch.
+            # If we do not clear them, next epoch will add new gradients to old ones.
             w.grad.zero_()
 
-        print(f"Epoch {epoch:02d}: Loss={loss.item():.6f}, w={w.item():.6f}")
+        print(f"Epoch {epoch:02d}: Loss={loss.item():.6f}, w={w.item():.6f}, grad={grad_w:.6f}")
 
-    # -------------------------
-    # B) nn.Module + optimizer
-    # -------------------------
+    # =========================================================
+    # B) nn.Module + optimizer (standard PyTorch)
+    # =========================================================
     title("6B) TRAINING (PyTorch style): nn.Module + optimizer")
 
+    """
+    WHAT nn.Module DOES (high-level)
+    -------------------------------
+    nn.Module is the standard base class for models in PyTorch.
+
+    It organizes:
+    - Learnable parameters (weights) as nn.Parameter
+    - The forward computation (forward method)
+    - device moves: model.to(device)
+    - saving/loading: model.state_dict()
+    - integration with optimizers: optimizer = SGD(model.parameters(), ...)
+
+    Key idea:
+        forward() defines the math
+        optimizer.step() updates the parameters using the gradients
+    """
+
     class MyMulModel(nn.Module):
+        """
+        Minimal model:
+            y_pred = w * x
+
+        - self.w is a learnable weight (nn.Parameter)
+        - forward(x_in) defines the computation
+        """
         def __init__(self):
             super().__init__()
+
+            # nn.Parameter registers the tensor as a trainable parameter:
+            # - requires_grad=True automatically
+            # - appears in model.parameters() so the optimizer can update it
             self.w = nn.Parameter(torch.tensor([1.0], dtype=torch.float32))
 
-        def forward(self, x):
-            return self.w * x
+        def forward(self, x_in):
+            # Forward pass: compute prediction.
+            # When we call model(x), PyTorch actually calls forward(x) here.
+            return self.w * x_in
 
+    # Instantiate model and move it to the same device as the data
     model = MyMulModel().to(device)
+
+    # Show what's inside (educational):
+    print("\nModel:", model)
+    print("Parameters:", [name for name, _ in model.named_parameters()])
+    print("state_dict keys:", list(model.state_dict().keys()))
+
+    # Loss function object (same MSE as manual version but packaged nicely)
     criterion = nn.MSELoss()
+
+    # Optimizer knows which parameters to update because we pass model.parameters()
     optimizer = optim.SGD(model.parameters(), lr=0.001)
 
     losses: List[float] = []
     weights: List[float] = []
 
     for epoch in range(10):
-        y_pred = model(X)
-        loss = criterion(y_pred, Y)
+        # 1) FORWARD PASS
+        # ----------------
+        # model(x) calls forward(x) and builds the computation graph.
+        y_pred = model(x)
 
+        # 2) LOSS
+        # --------
+        # criterion(y_pred, y) computes the scalar loss.
+        loss = criterion(y_pred, y)
+
+        # 3) BACKWARD PASS
+        # -----------------
+        # Reset gradients (otherwise they accumulate).
         optimizer.zero_grad()
+
+        # Compute gradients for ALL model parameters.
+        # Here it computes: model.w.grad
         loss.backward()
+
+        # Educational: prove what step() will do
+        w_before = model.w.item()
+        grad = model.w.grad.item()
+        lr = optimizer.param_groups[0]["lr"]
+        expected_w = w_before - lr * grad
+
+        # 4) UPDATE STEP
+        # --------------
+        # optimizer.step() updates each parameter (here only w) using its gradient.
+        # For SGD without momentum, it effectively does:
+        #   w = w - lr * w.grad
         optimizer.step()
 
-        losses.append(loss.item())
-        weights.append(model.w.item())
+        w_after = model.w.item()
 
-        print(f"Epoch {epoch:02d}: Loss={loss.item():.6f}, w={model.w.item():.6f}")
+        losses.append(loss.item())
+        weights.append(w_after)
+
+        print(
+            f"Epoch {epoch:02d}: "
+            f"Loss={loss.item():.6f}, "
+            f"w_before={w_before:.6f}, grad={grad:.6f}, expected_w={expected_w:.6f}, w_after={w_after:.6f}"
+        )
 
     return model, optimizer, losses, weights
-
 
 # =========================================================
 # 7) CHECKPOINTS + TRACKING
@@ -433,6 +658,49 @@ def demo_checkpoints_and_tracking(
 # tensorboard --logdir runs
 """)
 
+# =========================================================
+# 8) VISUALIZE LEARNING PROCESS (Loss + Weight curves)
+# =========================================================
+def demo_visualize_learning(losses: List[float], weights: List[float]) -> None:
+    """
+    Visualize the learning process, like on the slide.
+
+    We stored during training:
+        - losses  : loss value at each epoch
+        - weights : current value of w at each epoch
+
+    EXPECTED:
+    - Loss curve should go DOWN as training improves
+    - Weight curve should move toward the best value (≈ 2 for this dataset)
+    """
+
+    import matplotlib.pyplot as plt
+
+    # Create a wide figure with 2 plots side-by-side
+    plt.figure(figsize=(12, 5))
+
+    # -------------------------
+    # Plot 1: Loss over epochs
+    # -------------------------
+    plt.subplot(1, 2, 1)
+    plt.plot(losses, label="Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Loss over Epochs")
+    plt.legend()
+
+    # -------------------------
+    # Plot 2: Weight over epochs
+    # -------------------------
+    plt.subplot(1, 2, 2)
+    plt.plot(weights, label="Weight (w)")
+    plt.xlabel("Epoch")
+    plt.ylabel("w")
+    plt.title("Weight (w) over Epochs")
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
 
 # ---------------------------------------------------------
 # MAIN
@@ -443,8 +711,9 @@ def main() -> None:
     demo_tensor_creation_errors()
     demo_reshaping()
     device = demo_devices()
-    demo_autograd()
+    demo_autograd_and_training_link()
     model, optimizer, losses, weights = demo_training(device)
+    demo_visualize_learning(losses, weights)
     demo_checkpoints_and_tracking(model, optimizer, losses, weights, device)
 
     title("Done ✅")
