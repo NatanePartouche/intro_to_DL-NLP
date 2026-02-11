@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import List, Tuple
 
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 
@@ -701,6 +702,173 @@ def demo_visualize_learning(losses: List[float], weights: List[float]) -> None:
 
     plt.tight_layout()
     plt.show()
+
+
+"""
+---------------------------------------------------------
+PART 9 — Linear Regression with Batch Gradient Descent
+(Explanation of the slide)
+---------------------------------------------------------
+
+This slide shows a complete implementation of Linear Regression
+trained using Batch Gradient Descent (BGD).
+
+1) The dataset
+
+galaxy_data = np.array([[2,70],
+                        [3,110],
+                        [4,165],
+                        [6,390],
+                        [7,550]])
+
+Each row contains:
+    column 0 -> x value (feature)
+    column 1 -> y value (target)
+
+Here:
+    x = phone model version (or galaxy index)
+    y = price
+
+2) The model
+
+We assume a linear model:
+
+    y_pred = w * x + b
+
+where:
+    w = slope (weight)
+    b = bias (intercept)
+
+We start with:
+    w = 0
+    b = 0
+
+3) Learning rate
+
+alpha = 0.01
+
+This controls how big each update step is.
+Too large -> unstable
+Too small -> slow learning
+
+4) Batch Gradient Descent loop
+
+for iteration in range(10000):
+
+At each iteration:
+
+a) Compute gradients
+
+gradient_b = mean((w*x + b - y))
+gradient_w = mean(x * (w*x + b - y))
+
+These are the derivatives of the MSE loss with respect to:
+    - b
+    - w
+
+Because this is Batch Gradient Descent,
+we compute the mean over ALL data points.
+
+5) Parameter update
+
+b -= alpha * gradient_b
+w -= alpha * gradient_w
+
+This moves parameters in the direction
+that reduces the loss.
+
+6) Monitoring training
+
+Every 200 iterations,
+the code prints:
+    iteration number
+    gradient values
+    current w and b
+
+This allows us to see convergence.
+
+7) Final prediction
+
+After training:
+    print("Estimated price for Galaxy S5:", w*5 + b)
+
+We use the learned linear model
+to predict the price for x = 5.
+
+---------------------------------------------------------
+Summary
+---------------------------------------------------------
+
+The slide demonstrates:
+- Linear model: y = wx + b
+- MSE loss
+- Gradient computation
+- Batch Gradient Descent
+- Parameter updates
+- Final prediction
+
+This is a complete classical ML pipeline
+implemented from scratch using NumPy.
+"""
+
+# ---------------------------------------------------------
+# 1) Dataset
+# ---------------------------------------------------------
+# Each row: [x, y]
+galaxy_data = np.array([
+    [2, 70],
+    [3, 110],
+    [4, 165],
+    [6, 390],
+    [7, 550]
+])
+
+x = galaxy_data[:, 0]
+y = galaxy_data[:, 1]
+
+# ---------------------------------------------------------
+# 2) Initialize parameters
+# ---------------------------------------------------------
+w = 0.0   # slope
+b = 0.0   # bias
+
+# Learning rate
+alpha = 0.01
+
+# Number of iterations
+num_iterations = 10000
+
+# ---------------------------------------------------------
+# 3) Training loop (Batch Gradient Descent)
+# ---------------------------------------------------------
+for iteration in range(num_iterations):
+
+    # Forward pass
+    y_pred = w * x + b
+
+    # Compute gradients (derivatives of MSE)
+    gradient_w = np.mean(x * (y_pred - y))
+    gradient_b = np.mean(y_pred - y)
+
+    # Update parameters
+    w -= alpha * gradient_w
+    b -= alpha * gradient_b
+
+    # Print progress every 200 iterations
+    if iteration % 200 == 0:
+        loss = np.mean((y_pred - y) ** 2)
+        print(f"it={iteration}, loss={loss:.2f}, w={w:.3f}, b={b:.3f}")
+
+# ---------------------------------------------------------
+# 4) Final model
+# ---------------------------------------------------------
+print("\nTraining finished.")
+print(f"Final parameters: w = {w:.3f}, b = {b:.3f}")
+
+# Predict price for x = 5
+prediction = w * 5 + b
+print(f"Estimated price for Galaxy S5 (x=5): {prediction:.2f}")
+
 
 # ---------------------------------------------------------
 # MAIN
